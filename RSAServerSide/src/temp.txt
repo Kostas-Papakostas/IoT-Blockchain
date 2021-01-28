@@ -1,0 +1,34 @@
+//What you want to do with the client's message
+        char c4[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &(client.sin_addr), c4, INET_ADDRSTRLEN);
+        printf("message from %s: %s\n",c4, client_HandshakeMessage);
+        std::string s(client_HandshakeMessage);
+        size_t pos;
+        std::string s2="public:";
+        struct clientCom client_com;
+
+        if((pos=s.find("public:"))==0){
+            s.erase(pos, s2.length());
+            client_com.client_sock=sock;
+            client_com.e=std::stoi(s.substr(0,s.find(',')));
+            client_com.n=std::stoi(s.substr(s.find(',')+1,s.length()));
+            clients.push_back(client_com);
+            printf("e is %d, n is %d\n",client_com.e,client_com.n);
+        }
+        
+        memset(client_HandshakeMessage, 0, 2000);
+        Keys *mykeys = new Keys();
+        std::string str;
+        unsigned int characterS[2000];
+        std::string h(hello);
+        unsigned int temp;
+        for (int i = 0; h[i]!='\0'; i++) {
+            temp = mykeys->moduloExponential(h[i], client_com.e, client_com.n);
+            str+=temp;
+            characterS[i] = temp;
+        }
+
+        printf("\nmy message: %s",str.c_str());
+        //send(sock , str.c_str() , strlen(str.c_str()) , 0 );
+        send(sock , characterS , 2000*sizeof(unsigned int) , 0 );
+        handshakeReadSize = recv(sock, client_HandshakeMessage, 2000, 0);
