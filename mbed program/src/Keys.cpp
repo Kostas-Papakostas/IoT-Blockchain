@@ -33,7 +33,7 @@ unsigned long Keys::lcm(unsigned long a, unsigned long b) {
 }
 
 bool Keys::isPrime(unsigned long a) {
-	for (unsigned long i = 2; i < sqrt(a); i++) {
+	for (unsigned long i = 2; i < sqrt(a); i++) { //USING kind of sieve of Eratosthenes method
 		if (a % i == 0) {
 			//std::cout << "Prime not found for number " << a << "\ndivider is "<<i<<std::endl;
 			return false;
@@ -44,14 +44,19 @@ bool Keys::isPrime(unsigned long a) {
 
 unsigned long Keys::modInverse(unsigned long a, unsigned long m) {
 	unsigned long t = 0, newt = 1;
-    unsigned long r = m, newr = a;  
+    unsigned long r = m, newr = a;
+	/**
+	*Using tuples and ties to keep the objects
+	*as pairs
+	*saves a lot of time
+	*/
     while (newr != 0) {
         auto quotient = r /newr;
         std::tie(t, newt) = std::make_tuple(newt, t- quotient * newt);
         std::tie(r, newr) = std::make_tuple(newr, r - quotient * newr);
     }
     if (r > 1)
-        perror("a is not invertible");
+        throw std::runtime_error("a is not invertible");
     if (t < 0)
         t += n;
     return t;
@@ -59,11 +64,14 @@ unsigned long Keys::modInverse(unsigned long a, unsigned long m) {
 
 unsigned long long int Keys::moduloExponential(unsigned long a, unsigned long key, unsigned long m) {
 	unsigned long long int result = 1;
-    while (key > 0)
+    
+	/**Computing modulo by using binary operators
+	 * this can produce really fast result for up to 10^7 mod numbers
+	 * ***/
+	while (key > 0)
 	{
 		if (key & 1)
 		{
-			
 			a=a%m;
 			result = (result * a)%m;
 			result=result%m;
@@ -99,11 +107,15 @@ void Keys::generateKeys() {
 			}
 			keyPair.first=p;
 			keyPair.second=q;
-
+			
+			/***Keeping each pair into a vector to avoid more loops
+			 * and looking for a new one***/
 			std::vector<std::pair<unsigned long , unsigned long >>::iterator it = std::find(notCompPairs.begin(), notCompPairs.end(), keyPair);
 			pairExists=false;
 			if(it != notCompPairs.end()){
 				pairExists=true;
+				p_prime=false;
+				q_prime=false;
 			}else if(it == notCompPairs.end()){
 				pairExists=false;
 				notCompPairs.push_back(keyPair);

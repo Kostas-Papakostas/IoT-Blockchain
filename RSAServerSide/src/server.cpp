@@ -149,37 +149,26 @@ void* connection_Handler(void *socket_desc_p)
             auto stopDecr = std::chrono::high_resolution_clock::now();
             auto decrDuration = std::chrono::duration_cast<std::chrono::milliseconds>(stopDecr-startDecr);
             printf("Decryption time elapsed(ms): %ld\n",decrDuration.count());
-
-            /*CHECKING IF THERE IS PREVIOUS HASH OR IT IS THE FIRST CLIENT ASKING FOR BLOCK*/
-            auto startHashing = std::chrono::high_resolution_clock::now();
-            bool hashedMessageComputed = true;
-            std::string hashedMessage;
-            if(previousHash.compare("1F")==0){
-                do{
-                    hashedMessage = sha256(decryptedMessage);
-                    previousHash+=hashedMessage;
-                    std::string stbp = strToBinary(previousHash);
-                    for(int i=0; i<3; i++){
-                        hashedMessageComputed=true;
-                        if(stbp.at(i)!=0){
-                            hashedMessageComputed=false;
-                        }
-                    }
-                }while(!hashedMessageComputed);
-            }else if(!previousHash.empty()){
-                do{
-                    hashedMessage = sha256(previousHash);
-                    std::string stbp = strToBinary(hashedMessage);
-                    for(int i=0; i<3; i++){
-                        std::bitset<21>(previousHash.c_str());
-                        hashedMessageComputed=true;
-                        
-                        if(stbp.at(i)!=0){
-                            hashedMessageComputed=false;
-                        }
-                    }
-                }while(!hashedMessageComputed);
+            int nonce;
+            int pos;
+            if((pos = decryptedMessage.find("nonce/"))!=std::string::npos){
+                nonce=atoi(decryptedMessage.substr(0,pos).c_str()); /*using this to extract the nonce*/
+            }else{
+                nonce=0;
             }
+            /*CHECKING IF THERE IS PREVIOUS HASH OR IT IS THE FIRST CLIENT ASKING FOR BLOCK*/
+			/**code changed no need for check**/
+            auto startHashing = std::chrono::high_resolution_clock::now();
+            std::string hashedMessage;
+            
+            do{
+                nonce++;
+                hashedMessage = sha256(std::to_string(nonce)+previousHash);
+                previousHash=hashedMessage;
+                if(hashedMessage.substr(0,3).compare("000")==0){
+                    break;
+                }
+            }while(true);
 
             auto stopHashing = std::chrono::high_resolution_clock::now();
             auto hashDuration = std::chrono::duration_cast<std::chrono::milliseconds>(stopHashing-startHashing);
@@ -253,8 +242,41 @@ int main(int argc, char const *argv[])
 
     myE = prep_algo->getMyKeys()->getE();
     myN = prep_algo->getMyKeys()->getN();
+    int nonce=0;
+    std::string decryptedMessage = std::to_string(nonce)+"I'm some data"+"date";
+    /*CHECKING IF THERE IS PREVIOUS HASH OR IT IS THE FIRST CLIENT ASKING FOR BLOCK*/
+    auto startHashing = std::chrono::high_resolution_clock::now();
+    bool hashedMessageComputed = true;
+    std::string hashedMessage;
+    if(previousHash.compare("1F")==0){
+        do{
+            nonce++;
+            hashedMessage = sha256(decryptedMessage);
+            previousHash+=hashedMessage;
+            if(hashedMessage.substr(0,3).compare("000")==0){
+                printf("hashed %s\n",hashedMessage.c_str());
+                break;
+            }
+            //printf(" %s \n",hashedMessage.substr(0,5).c_str());
+            decryptedMessage=std::to_string(nonce)+previousHash;
+        }while(true);
+    }else if(!previousHash.empty()){
+        do{
+            nonce++;
+            hashedMessage = sha256(decryptedMessage);
+            previousHash+=hashedMessage;
+            if(hashedMessage.substr(0,3).compare("000")==0){
+                printf("hashed %s\n",hashedMessage.c_str());
+                break;
+            }
+            //printf(" %s \n",hashedMessage.substr(0,5).c_str());
+            decryptedMessage=std::to_string(nonce)+previousHash;
+        }while(true);
+    }
 
-    
+    auto stopHashing = std::chrono::high_resolution_clock::now();
+    auto hashDuration = std::chrono::duration_cast<std::chrono::milliseconds>(stopHashing-startHashing);
+    printf("Hashing time elapsed(ms): %ld\n",hashDuration.count());
 
     /**sockets thing**/
     server_fd = socket(AF_INET, SOCK_STREAM, 0);

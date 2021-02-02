@@ -16,11 +16,11 @@
 #include <vector>
 #include "RSAAlgorithm.h"
 
-std::vector<unsigned long long> RSAAlgorithm::encryption(std::string inputString,unsigned long otherEndE, unsigned long otherEndN){
+std::vector<unsigned long long int> RSAAlgorithm::encryption(std::string inputString,unsigned long otherEndE, unsigned long otherEndN){
     printf("The value of string \"%s\" ", inputString.c_str());
 
-    unsigned long long temp;
-    std::vector<unsigned long long> str2;
+    unsigned long temp;
+    std::vector<unsigned long long int> str2;
     for (int i = 0; inputString[i]!='\0'; i++) {
         temp = mykeys->moduloExponential(inputString[i], otherEndE, otherEndN);
         str2.push_back(temp);
@@ -33,7 +33,7 @@ std::vector<unsigned long long> RSAAlgorithm::encryption(std::string inputString
     return str2;
 }
 
-std::string RSAAlgorithm::decryption(std::vector<unsigned long long> encryptedString){
+std::string RSAAlgorithm::decryption(std::vector<unsigned long long int> encryptedString){
     printf("decyphered text: ");
     std::string strDecrypted;
 
@@ -57,8 +57,15 @@ void RSAAlgorithm::main_Algorithm()
     std::vector<unsigned long> str2;
     mykeys=new Keys();
 
-    mykeys->generateKeys();
-/*    inputFile.open("build/keys");
+    std::cout<<"Do you want to generate RSA keys??(y or n)\n";
+    approval=getchar();
+    if(approval=='y'){
+      std::remove("build/keys");
+      mykeys->generateKeys();
+    }else{
+      std::cout<<"using already existing keys file\n";
+    }
+    inputFile.open("build/keys");
     if (!inputFile.is_open()) {
         outputFile.open("build/keys", std::ios::out);
         std::string tempStrPrivate = "(" + std::to_string(mykeys->getD()) + "," + std::to_string(mykeys->getN()) + ")\n";
@@ -83,5 +90,16 @@ void RSAAlgorithm::main_Algorithm()
         mykeys->setE(std::stoull(tempInputPublic.substr(0, tempInputPublic.find(','))));
         inputFile.close();
     }
-*/
+
+    // std::cout << "please type your message\n" << std::endl;
+    // getline(std::cin, str);
+    // getline(std::cin, str);
+
+    // str2 = encryption(str);
+    // std::string testString;
+    // testString = std::to_string(str2.at(0));
+    
+    // std::string myString = decryption(str2);
+    // printf("outer prunsigned long %d\n",atoi(testString.c_str()));
+
 }

@@ -10,7 +10,7 @@ private:
 	unsigned long lcm(unsigned long a, unsigned long b);
 
 	unsigned long modInverse(unsigned long a, unsigned long m);
-	int bitsNumber=14;
+	int bitsNumber=16;
 
 public:
 	unsigned long getN() { return n; }

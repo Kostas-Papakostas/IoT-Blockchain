@@ -8,11 +8,40 @@
 #include "RSAAlgorithm.h"
 #include <chrono>
 #include <cstdio>
+#include <ctime>
+#include <cstdlib>
 #include <string>
 #include <Timer.h>
 #include <vector>
- 
-const char* ECHO_SERVER_ADDRESS = "83.212.187.9";
+
+#if !defined(MBEDTLS_CONFIG_FILE)
+#include "mbedtls/config.h"
+#else
+#include MBEDTLS_CONFIG_FILE
+#endif
+
+#if defined(MBEDTLS_PLATFORM_C)
+#include "mbedtls/platform.h"
+#else
+#include <stdio.h>
+#define mbedtls_printf     printf
+#endif
+
+#if defined(MBEDTLS_BIGNUM_C) && defined(MBEDTLS_ENTROPY_C) && \
+    defined(MBEDTLS_RSA_C) && defined(MBEDTLS_GENPRIME) && \
+    defined(MBEDTLS_FS_IO) && defined(MBEDTLS_CTR_DRBG_C)
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/bignum.h"
+#include "mbedtls/x509.h"
+#include "mbedtls/rsa.h"
+
+#endif
+
+#define KEY_SIZE 2048
+#define EXPONENT 65537
+
+const char* ECHO_SERVER_ADDRESS = "127.0.0.1";//add server ip here
 const int ECHO_SERVER_PORT = 80;
  
 struct neighbourNodes{
@@ -23,6 +52,8 @@ struct neighbourNodes{
 struct neighbourNodes nodes;
 NetworkInterface *net;
 TCPSocket socket;
+
+int nonce=std::rand()%255;
 
 int main() {
     
@@ -38,11 +69,62 @@ int main() {
 
     printf("RSA computation time(ms): %d\n", rsaDuration);
     Keys *keysObj = prepAlgor->getMyKeys();
-    unsigned long e=keysObj->getE(), n=keysObj->getN();
     
-  //  e=18077;
-    //n=579494389;
-    //keysObj->setD(169534805);
+    int ret;
+    mbedtls_rsa_context rsa;
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_mpi N, P, Q, D, E, DP, DQ, QP;
+    FILE *fpub  = NULL;
+    FILE *fpriv = NULL;
+    const char *pers = "rsa_genkey";
+    unsigned long e, n;
+
+    mbedtls_ctr_drbg_init( &ctr_drbg );
+    mbedtls_rsa_init( &rsa, MBEDTLS_RSA_PKCS_V15, 0 );
+    mbedtls_mpi_init( &N ); mbedtls_mpi_init( &P ); mbedtls_mpi_init( &Q );
+    mbedtls_mpi_init( &D ); mbedtls_mpi_init( &E ); mbedtls_mpi_init( &DP );
+    mbedtls_mpi_init( &DQ ); mbedtls_mpi_init( &QP );
+
+    mbedtls_printf( "\n  . Seeding the random number generator..." );
+    fflush( stdout );
+
+    mbedtls_entropy_init( &entropy );
+    if( ( ret = mbedtls_ctr_drbg_seed( &ctr_drbg, mbedtls_entropy_func, &entropy,
+                               (const unsigned char *) pers,
+                               strlen( pers ) ) ) != 0 )
+    {
+        mbedtls_printf( " failed\n  ! mbedtls_ctr_drbg_seed returned %d\n", ret );
+        return 0;
+    }
+
+    mbedtls_printf( " ok\n  . Generating the RSA key [ %d-bit ]...", KEY_SIZE );
+    fflush( stdout );
+
+    if( ( ret = mbedtls_rsa_gen_key( &rsa, mbedtls_ctr_drbg_random, &ctr_drbg, KEY_SIZE,
+                                     EXPONENT ) ) != 0 )
+    {
+        mbedtls_printf( " failed\n  ! mbedtls_rsa_gen_key returned %d\n\n", ret );
+        return 0;
+    }
+
+    mbedtls_printf( " ok\n  . Exporting the public  key in rsa_pub.txt...." );
+    fflush( stdout );
+
+    if( ( ret = mbedtls_rsa_export    ( &rsa, &N, &P, &Q, &D, &E ) ) != 0 ||
+        ( ret = mbedtls_rsa_export_crt( &rsa, &DP, &DQ, &QP ) )      != 0 )
+    {
+        mbedtls_printf( " failed\n  ! could not export RSA parameters\n\n" );
+        ret = 1;
+        return 0;
+    }
+    e=*E.p; n=*N.p;
+    prepAlgor->getMyKeys()->setE(e);
+    prepAlgor->getMyKeys()->setN(n);
+
+    printf(" q:%zu, p:%zu, d:%zu, e:%zu, n:%zu\n", *Q.p, *(P.p), *D.p, *E.p, *N.p);
+    printf(" e:%lu, n:%lu\n", e, n);
+
 /*************TO BE REMOVED******************/
     t.start();
     std::string inS = "block request node/"+to_string(node);
@@ -52,15 +134,18 @@ int main() {
     printf("RSA encryption time(ms): %d\n", encrDuration);
 
     t.start();
+    prepAlgor->getMyKeys()->setD(*D.p);
     std::string sssss = prepAlgor->decryption(encrMSG);
     t.stop();
     int decrDuration = t.read_ms();
     printf("RSA decryption time(ms): %d\n", decrDuration);
 /***********END TO BE REMOVED*****************/
+
     eString=to_string(prepAlgor->getMyKeys()->getE());
     nString=to_string(prepAlgor->getMyKeys()->getN());
 
     printf("socket thingy\n");
+
 
     if (!net) {
         printf("Error! No network inteface found.\n");
@@ -115,6 +200,7 @@ int main() {
     
     string connectionEstablishMsg = "GET Handshake/"+to_string(net->get_ip_address(&a))+
                                         "/public key/e/"+to_string(e)+"/n/"+to_string(n);
+
     nsapi_size_t size = connectionEstablishMsg.length();
 
     while (size) {
@@ -140,7 +226,7 @@ int main() {
     string acceptRequest;
     
     while(dataReceived<2048 && (bytes<2048-dataReceived)){
-        //bytes = socket.recv( bufAcceptRequest, sizeof(bufAcceptRequest)*sizeof(char));    //it throws stack overflow error(weird)
+        bytes = socket.recv( bufAcceptRequest, sizeof(bufAcceptRequest)*sizeof(char));    //it throws stack overflow error(weird) don't know the reason, maybe mbed's version bug
         if(bytes<0){
             printf("Error receiving data code: %d",bytes);
             socket.close();
@@ -163,8 +249,20 @@ int main() {
     int requestSize;
     int reqResult;
 
+
+    time_t rawtime;
+    struct tm * timeinfo;
+    char timeBuffer[80];
+
+    time (&rawtime);
+    timeinfo = localtime(&rawtime);
+
+    strftime(timeBuffer,sizeof(timeBuffer),"%d-%m-%Y %H:%M:%S",timeinfo);
+    std::string timeStr(timeBuffer);
+
+
     while(true){
-        string blockRequest = "block request node/"+to_string(node);
+        string blockRequest =std::to_string(nonce)+"nonce/block request node/"+to_string(node)+"I'm some data"+timeStr;
         
         t.start();
         std::vector<unsigned long long> messageEncrypted(prepAlgor->encryption(blockRequest, serversE, serversN));
@@ -215,9 +313,8 @@ int main() {
 
 DISCONNECT1:
     socket.close();
-//    net->disconnect();
+    net->disconnect();
     printf("Done\n");
     
-    //while(true) {}
-    //return 0;
+    return 0;
 }
